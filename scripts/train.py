@@ -8,7 +8,7 @@ e salva o modelo treinado para uso posterior em uma API FastAPI.
 
 import logging
 import os
-from typing import Final
+from typing import Final, Tuple
 
 import joblib
 import numpy as np
@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 RANDOM_STATE: Final[int] = 42
 TEST_SIZE: Final[float] = 0.2
 N_ESTIMATORS: Final[int] = 100
+DEFAULT_MODEL_PATH: Final[str] = os.path.join('app', 'churn_model.joblib')
 
 def generate_synthetic_data(n_samples: int = 1000, random_state: int = RANDOM_STATE) -> pd.DataFrame:
     """
@@ -54,34 +55,8 @@ def generate_synthetic_data(n_samples: int = 1000, random_state: int = RANDOM_ST
         'churn': churn
     })
 
-def train_and_save_model(
-    model_path: str = 'app/churn_model.joblib', 
-    n_samples: int = 1000, 
-    random_state: int = RANDOM_STATE
-) -> None:
-    """
-    Gera dados, treina o modelo RandomForest e persiste em disco.
-    
-    Args:
-        model_path: Caminho para salvar o arquivo .joblib.
-        n_samples: Quantidade de dados para treinamento.
-        random_state: Semente aleatória.
-    """
-    logger.info("Iniciando processo de treinamento...")
-    
-    logger.info("Gerando dados sintéticos...")
-    df = generate_synthetic_data(n_samples=n_samples, random_state=random_state)
-    
-    # Seleção de features e target
-    features = ['tempo_assinatura', 'frequencia_pedidos', 'valor_medio']
-    x_data = df[features]
-    y_data = df['churn']
-    
-    logger.info("Realizando divisão dos dados entre treino e teste...")
-    x_train, x_test, y_train, y_test = train_test_split(
-        x_data, y_data, test_size=TEST_SIZE, random_state=random_state
-    )
-    
+def train_model(x_train: pd.DataFrame, y_train: pd.Series, random_state: int = RANDOM_STATE) -> RandomForestClassifier:
+    """Treina o modelo RandomForest."""
     logger.info("Treinando o modelo RandomForestClassifier...")
     model = RandomForestClassifier(
         n_estimators=N_ESTIMATORS,
@@ -89,12 +64,11 @@ def train_and_save_model(
         n_jobs=-1
     )
     model.fit(x_train, y_train)
-    
-    accuracy = model.score(x_test, y_test)
-    logger.info("Acurácia no conjunto de teste: %.4f", accuracy)
-    
+    return model
+
+def save_model(model: RandomForestClassifier, model_path: str) -> None:
+    """Persiste o modelo em disco."""
     try:
-        # Garante que o diretório de destino existe
         directory = os.path.dirname(model_path)
         if directory:
             os.makedirs(directory, exist_ok=True)
@@ -105,6 +79,33 @@ def train_and_save_model(
     except (OSError, IOError) as e:
         logger.error("Erro ao salvar o modelo no caminho %s: %s", model_path, e)
         raise
+
+def train_and_save_model(
+    model_path: str = DEFAULT_MODEL_PATH, 
+    n_samples: int = 1000, 
+    random_state: int = RANDOM_STATE
+) -> None:
+    """
+    Fluxo principal: Gera dados, treina o modelo e persiste em disco.
+    """
+    logger.info("Iniciando processo de treinamento...")
+    
+    df = generate_synthetic_data(n_samples=n_samples, random_state=random_state)
+    
+    features = ['tempo_assinatura', 'frequencia_pedidos', 'valor_medio']
+    x_data = df[features]
+    y_data = df['churn']
+    
+    x_train, x_test, y_train, y_test = train_test_split(
+        x_data, y_data, test_size=TEST_SIZE, random_state=random_state
+    )
+    
+    model = train_model(x_train, y_train, random_state=random_state)
+    
+    accuracy = model.score(x_test, y_test)
+    logger.info("Acurácia no conjunto de teste: %.4f", accuracy)
+    
+    save_model(model, model_path)
 
 if __name__ == "__main__":
     train_and_save_model()
