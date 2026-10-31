@@ -1,23 +1,40 @@
 #!/usr/bin/env python3
+"""
+Script de treinamento e persistência de modelo de ML para previsão de churn.
 
+Este script gera dados sintéticos, treina um classificador RandomForest 
+e salva o modelo treinado para uso posterior em uma API FastAPI.
+"""
+
+import logging
+import os
+from typing import Final
+
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
-import joblib
-import os
 
-def generate_synthetic_data(n_samples=1000, random_state=42):
+# Configuração de logging
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logger = logging.getLogger(__name__)
+
+# Constantes para reprodutibilidade e configuração
+RANDOM_STATE: Final[int] = 42
+TEST_SIZE: Final[float] = 0.2
+N_ESTIMATORS: Final[int] = 100
+
+def generate_synthetic_data(n_samples: int = 1000, random_state: int = RANDOM_STATE) -> pd.DataFrame:
     """
     Gera dados sintéticos de exemplo para previsão de churn.
     
-    Features:
-    - tempo_assinatura (0-5 anos, maior reduz churn)
-    - frequencia_pedidos (0-50, maior reduz churn)
-    - valor_medio (0-1000, maior reduz churn)
-    
-    Target: 0 (não cancela), 1 (cancela)
-    Lógica: Cliente cancela se (tempo*0.5 + freq*0.3) < threshold
+    Args:
+        n_samples: Número de amostras a serem geradas.
+        random_state: Semente para reprodutibilidade.
+        
+    Returns:
+        pd.DataFrame: Dataset contendo as features e o alvo (churn).
     """
     np.random.seed(random_state)
     
@@ -25,60 +42,69 @@ def generate_synthetic_data(n_samples=1000, random_state=42):
     frequencia_pedidos = np.random.uniform(0, 50, n_samples)
     valor_medio = np.random.uniform(0, 1000, n_samples)
     
-    # Lógica de churn sintética
+    # Lógica de churn sintética: score de risco baseado em comportamento
     score_risco = tempo_assinatura * 0.5 + frequencia_pedidos * 0.3
-    threshold = 2.0  # Clientes com score de risco menor que 2 são menos propensos a cancelar
+    threshold = 2.0
     churn = (score_risco < threshold).astype(int)
     
-    df = pd.DataFrame({
+    return pd.DataFrame({
         'tempo_assinatura': tempo_assinatura,
         'frequencia_pedidos': frequencia_pedidos,
         'valor_medio': valor_medio,
         'churn': churn
     })
-    
-    return df
 
-def train_and_save_model(model_path='app/churn_model.joblib', n_samples=1000, random_state=42):
+def train_and_save_model(
+    model_path: str = 'app/churn_model.joblib', 
+    n_samples: int = 1000, 
+    random_state: int = RANDOM_STATE
+) -> None:
     """
-    Gera dados, treina o modelo e salva o modelo treinado.
+    Gera dados, treina o modelo RandomForest e persiste em disco.
+    
+    Args:
+        model_path: Caminho para salvar o arquivo .joblib.
+        n_samples: Quantidade de dados para treinamento.
+        random_state: Semente aleatória.
     """
-    print("Gerando dados sintéticos...")
+    logger.info("Iniciando processo de treinamento...")
+    
+    logger.info("Gerando dados sintéticos...")
     df = generate_synthetic_data(n_samples=n_samples, random_state=random_state)
     
-    # Features e target
-    X = df[['tempo_assinatura', 'frequencia_pedidos', 'valor_medio']]
-    y = df['churn']
+    # Seleção de features e target
+    features = ['tempo_assinatura', 'frequencia_pedidos', 'valor_medio']
+    x_data = df[features]
+    y_data = df['churn']
     
-    print("Realizando divisão dos dados...")
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=random_state)
-    
-    print("Treinando o modelo RandomForestClassifier...")
-    model = RandomForestClassifier(
-        n_estimators=100,
-        max_depth=None,
-        min_samples_split=2,
-        random_state=random_state,
-        n_jobs=-1  # Usa todos os cores disponíveis
+    logger.info("Realizando divisão dos dados entre treino e teste...")
+    x_train, x_test, y_train, y_test = train_test_split(
+        x_data, y_data, test_size=TEST_SIZE, random_state=random_state
     )
-    model.fit(X_train, y_train)
     
-    # Avaliação no conjunto de teste (para validação)
-    accuracy = model.score(X_test, y_test)
-    print(f"\nAvaliação do modelo no conjunto de teste:")
-    print(f"Acurácia: {accuracy:.4f}")
+    logger.info("Treinando o modelo RandomForestClassifier...")
+    model = RandomForestClassifier(
+        n_estimators=N_ESTIMATORS,
+        random_state=random_state,
+        n_jobs=-1
+    )
+    model.fit(x_train, y_train)
     
-    # Certifica que o diretório 'app' existe
-    os.makedirs('app', exist_ok=True)
+    accuracy = model.score(x_test, y_test)
+    logger.info("Acurácia no conjunto de teste: %.4f", accuracy)
     
-    # Salva o modelo treinado
-    print(f"\nSalvando o modelo em {model_path}...")
-    joblib.dump(model, model_path)
-    print(f"Modelo salvo com sucesso!")
-    
-    # Mostra estatísticas básicas
-    print("\nEstatísticas do dataset:")
-    print(df.describe().to_string())
+    try:
+        # Garante que o diretório de destino existe
+        directory = os.path.dirname(model_path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+            
+        logger.info("Salvando o modelo em %s...", model_path)
+        joblib.dump(model, model_path)
+        logger.info("Modelo salvo com sucesso!")
+    except (OSError, IOError) as e:
+        logger.error("Erro ao salvar o modelo no caminho %s: %s", model_path, e)
+        raise
 
 if __name__ == "__main__":
     train_and_save_model()
