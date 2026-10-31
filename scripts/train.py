@@ -39,11 +39,11 @@ def generate_synthetic_data(n_samples: int = 1000, random_state: int = RANDOM_ST
     Returns:
         pd.DataFrame: Dataset contendo as features e o alvo (churn).
     """
-    np.random.seed(random_state)
-    
-    tempo_assinatura = np.random.Generator(0, 5, n_samples)
-    frequencia_pedidos = np.random.Generator(0, 50, n_samples)
-    valor_medio = np.random.Generator(0, 1000, n_samples)
+    rng = np.random.default_rng(random_state)
+
+    tempo_assinatura = rng.uniform(0, 5, n_samples)
+    frequencia_pedidos = rng.uniform(0, 50, n_samples)
+    valor_medio = rng.uniform(0, 1000, n_samples)
     
     # Lógica de churn sintética: score de risco baseado em comportamento
     score_risco = tempo_assinatura * 0.5 + frequencia_pedidos * 0.3
