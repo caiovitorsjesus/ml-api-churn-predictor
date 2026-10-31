@@ -8,7 +8,7 @@ e salva o modelo treinado para uso posterior em uma API FastAPI.
 
 import logging
 import os
-from typing import Final, Tuple
+from typing import Final
 
 import joblib
 import numpy as np
@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 RANDOM_STATE: Final[int] = 42
 TEST_SIZE: Final[float] = 0.2
 N_ESTIMATORS: Final[int] = 100
+MIN_SAMPLES_LEAF: Final[int] = 1
+MAX_FEATURES: Final[str] = 'sqrt'
 DEFAULT_MODEL_PATH: Final[str] = os.path.join('app', 'churn_model.joblib')
 
 def generate_synthetic_data(n_samples: int = 1000, random_state: int = RANDOM_STATE) -> pd.DataFrame:
@@ -60,6 +62,8 @@ def train_model(x_train: pd.DataFrame, y_train: pd.Series, random_state: int = R
     logger.info("Treinando o modelo RandomForestClassifier...")
     model = RandomForestClassifier(
         n_estimators=N_ESTIMATORS,
+        min_samples_leaf=MIN_SAMPLES_LEAF,
+        max_features=MAX_FEATURES,
         random_state=random_state,
         n_jobs=-1
     )
